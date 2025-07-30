@@ -1,29 +1,42 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 from io import BytesIO
+from datetime import datetime
+from rapidfuzz import fuzz
 
 st.set_page_config(layout="wide")
 st.title("📸 Optimized Auditor Image Review Dashboard")
 
-uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+# Upload CSV
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 if not uploaded_file:
     st.stop()
 
+# Read with encoding fallback
 try:
-    df = pd.read_csv(uploaded_file, encoding="ISO-8859-1")
+    df = pd.read_csv(uploaded_file, encoding='ISO-8859-1')
 except Exception as e:
     st.error(f"Error reading file: {e}")
     st.stop()
 
+# Date and time formatting
 df['DateTime'] = pd.to_datetime(df['Date'] + ' ' + df['Time Stamp'], format='%d-%m-%Y %H:%M:%S', errors='coerce')
 df['Date'] = pd.to_datetime(df['Date'], format='%d-%m-%Y', errors='coerce')
 df.dropna(subset=['Date'], inplace=True)
 df.fillna("Not Available", inplace=True)
-df.sort_values(by="DateTime", inplace=True)
+df.sort_values(by='DateTime', inplace=True)
 
-with st.form("filters"):
-    st.subheader("Filter Panel")
+# Real-time fuzzy search helper
+def fuzzy_filter(df, query):
+    if not query.strip():
+        return df
+    query = query.lower()
+    mask = df.apply(lambda row: any(fuzz.partial_ratio(str(cell).lower(), query) > 70 for cell in row), axis=1)
+    return df[mask]
+
+# Filter UI
+st.subheader("🔎 Filter Panel")
+with st.form("filter_form"):
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         cluster = st.selectbox("🌍 Cluster", ['All'] + sorted(df['Cluster'].unique()))
@@ -62,15 +75,15 @@ with st.form("filters"):
     with c9:
         absent = st.selectbox("❌ Absent Reason", ['All'] + sorted(df8['Absent Reason'].unique()))
     with c10:
-        search = st.text_input("🔍 Global Search")
+        search = st.text_input("🔍 Global Fuzzy Search")
 
     from_date = st.date_input("📅 From Date", value=df8['Date'].min().date())
     to_date = st.date_input("📅 To Date", value=df8['Date'].max().date())
 
-    col_submit = st.columns(2)
-    with col_submit[0]:
+    colz = st.columns(2)
+    with colz[0]:
         submit = st.form_submit_button("✅ Apply")
-    with col_submit[1]:
+    with colz[1]:
         reset = st.form_submit_button("🔄 Reset")
 
 if reset:
@@ -82,24 +95,31 @@ if submit:
         filtered = filtered[filtered['Absent Reason'] == absent]
     filtered = filtered[(filtered['Date'].dt.date >= from_date) & (filtered['Date'].dt.date <= to_date)]
     if search:
-        search = search.lower()
-        filtered = filtered[filtered.apply(lambda row: row.astype(str).str.lower().str.contains(search).any(), axis=1)]
+        filtered = fuzzy_filter(filtered, search)
 
+# Pagination
 page_size = 10
 total_pages = max(1, (len(filtered) - 1) // page_size + 1)
-page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
+colpg = st.columns(2)
+with colpg[0]:
+    page = st.number_input("📄 Page Number", min_value=1, max_value=total_pages, value=1)
+with colpg[1]:
+    st.markdown(f"**📚 Total Pages: {total_pages}**")
+
 start = (page - 1) * page_size
 end = start + page_size
 paginated = filtered.iloc[start:end]
 
+# Download filtered results
 buffer = BytesIO()
 filtered.to_excel(buffer, index=False)
 st.download_button("📥 Download Filtered Excel", data=buffer.getvalue(),
                    file_name="filtered_data.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
-for i, row in paginated.iterrows():
+# Display paginated results
+for idx, row in paginated.iterrows():
     st.markdown("---")
-    st.markdown(f"<div style='font-size:12px;'>🔢 S.No: {i+1}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='font-size:12px;'>🔢 S.No: {idx+1}</div>", unsafe_allow_html=True)
     st.markdown(f"### 🕵️ Auditor: **{row['Auditor Name']}**")
     st.markdown(f"""
     - 📅 DateTime: {row['DateTime']}
