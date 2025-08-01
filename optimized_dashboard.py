@@ -19,9 +19,9 @@ except Exception as e:
     st.error(f"Error reading file: {e}")
     st.stop()
 
-# Date and time formatting
-df['DateTime'] = pd.to_datetime(df['Date'] + ' ' + df['Time Stamp'], format='%d-%m-%Y %H:%M:%S', errors='coerce')
-df['Date'] = pd.to_datetime(df['Date'], format='%d-%m-%Y', errors='coerce')
+# More robust datetime parsing
+df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
+df['DateTime'] = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Time Stamp'].astype(str), errors='coerce')
 df.dropna(subset=['Date'], inplace=True)
 df.fillna("Not Available", inplace=True)
 df.sort_values(by='DateTime', inplace=True)
