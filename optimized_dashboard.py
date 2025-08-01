@@ -19,12 +19,22 @@ except Exception as e:
     st.error(f"Error reading file: {e}")
     st.stop()
 
-# More robust datetime parsing
+# Step 1: Convert both to string and replace missing/invalids with blank
+df['Date'] = df['Date'].astype(str).str.strip().replace('Not Available', '')
+df['Time Stamp'] = df['Time Stamp'].astype(str).str.strip().replace('Not Available', '')
+
+# Step 2: Combine into one string and parse
+df['DateTime'] = pd.to_datetime(df['Date'] + ' ' + df['Time Stamp'], dayfirst=True, errors='coerce')
+
+# Step 3: Re-parse just the date for filtering
 df['Date'] = pd.to_datetime(df['Date'], dayfirst=True, errors='coerce')
-df['DateTime'] = pd.to_datetime(df['Date'].astype(str) + ' ' + df['Time Stamp'].astype(str), errors='coerce')
+
+# Drop rows that failed to parse
 df.dropna(subset=['Date'], inplace=True)
-df.fillna("Not Available", inplace=True)
-df.sort_values(by='DateTime', inplace=True)
+
+# Sort by timestamp
+df.sort_values(by="DateTime", inplace=True)
+
 
 # Real-time fuzzy search helper
 def fuzzy_filter(df, query):
